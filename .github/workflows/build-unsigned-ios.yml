@@ -27,6 +27,16 @@ jobs:
       - name: Generate iOS project
         run: npx expo prebuild --platform ios --no-install
 
+      - name: Select newest Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest="$(ls -d /Applications/Xcode*.app | sort | tail -n 1)"
+          echo "Using $latest"
+          sudo xcode-select -s "$latest/Contents/Developer"
+          xcodebuild -version
+          swift --version
+
       - name: Install CocoaPods
         run: |
           cd ios
