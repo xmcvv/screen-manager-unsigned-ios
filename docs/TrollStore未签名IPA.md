@@ -1,6 +1,7 @@
 # TrollStore / 越狱安装说明
 
-本项目提供 GitHub macOS CI 工作流：
+本项目提供 GitHub macOS CI 工作流。仓库公开后，可在 Actions 页面手动运行，
+不要求 Apple Developer 账号：
 
 ```text
 .github/workflows/build-unsigned-ios.yml
