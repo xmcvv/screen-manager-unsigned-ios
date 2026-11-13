@@ -7,8 +7,13 @@
 - `source/screen_manager_api.c`：HTTP API
 - `source/uinputd.c`：接入 API 的主程序
 - `source/sd5580_link_main.c`：P4 协议处理
+- `source/main/netlink_rx.c`：P4 TCP/UDP 与链路 watchdog
+- `source/main/link_proto.h`：P4 控制命令与传输准备确认
 - `source/ui.c` / `ui.h`：六槽位布局和 NVS 持久化
 - `p4-net-watch.sh`：P4 OTA 重启后恢复 `usb1` 地址
+
+`uinputd` 和 P4 固件必须成对更新。新版 5580 会等待 P4 的 `0xA9/0xAA`
+存储准备确认，再发送壁纸或固件数据。
 
 ## 5580 部署
 
