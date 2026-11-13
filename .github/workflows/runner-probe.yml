@@ -5,7 +5,7 @@ on:
 
 jobs:
   probe:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Print host
         run: uname -a
