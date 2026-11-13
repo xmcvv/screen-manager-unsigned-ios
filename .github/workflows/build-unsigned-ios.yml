@@ -1,0 +1,85 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Generate iOS project
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Build unsigned device app
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="$(find ios -maxdepth 1 -name '*.xcworkspace' ! -path '*/project.xcworkspace' | head -n 1)"
+          if [[ -z "$workspace" ]]; then
+            echo "No iOS workspace found"
+            exit 1
+          fi
+
+          scheme="$(basename "$workspace" .xcworkspace)"
+          echo "Workspace: $workspace"
+          echo "Scheme: $scheme"
+
+          xcodebuild \
+            -workspace "$workspace" \
+            -scheme "$scheme" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$PWD/ios-build" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+          app="$(find "$PWD/ios-build/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' | head -n 1)"
+          if [[ -z "$app" ]]; then
+            echo "No .app bundle produced"
+            exit 1
+          fi
+
+          rm -rf Payload
+          mkdir Payload
+          ditto "$app" "Payload/$(basename "$app")"
+          zip -qry ScreenManager-v1.0.0-ios-trollstore-unsigned.ipa Payload
+
+          echo "IPA:"
+          ls -lh ScreenManager-v1.0.0-ios-trollstore-unsigned.ipa
+          shasum -a 256 ScreenManager-v1.0.0-ios-trollstore-unsigned.ipa
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScreenManager-unsigned-ipa
+          path: ScreenManager-v1.0.0-ios-trollstore-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,16 @@
+// Local build helper for networks where GitHub/Cloudflare artifact downloads
+// stall. This is passed explicitly with -I and is not part of the app bundle.
+def addMirrors = { repositories ->
+    repositories.maven { url = uri('https://maven.aliyun.com/repository/google') }
+    repositories.maven { url = uri('https://maven.aliyun.com/repository/public') }
+    repositories.maven { url = uri('https://maven.aliyun.com/repository/gradle-plugin') }
+}
+
+settingsEvaluated { settings ->
+    addMirrors(settings.pluginManagement.repositories)
+}
+
+gradle.beforeProject { project ->
+    addMirrors(project.buildscript.repositories)
+    addMirrors(project.repositories)
+}
