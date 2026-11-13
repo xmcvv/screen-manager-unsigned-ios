@@ -4,6 +4,7 @@ import type {
   DashboardConfig,
   StatusResponse,
   Telemetry,
+  TransferInfo,
   WallpaperPrepared,
 } from '../types/api';
 import {
@@ -17,9 +18,44 @@ export type SnapshotResponse = {
   dashboard?: DashboardConfig;
 };
 
+type TransferStatusResponse = {
+  ok: boolean;
+  transfer: TransferInfo;
+};
+
+type TransferAccepted = {
+  ok: boolean;
+  accepted?: boolean;
+  id?: number;
+  kind?: string;
+  state?: string;
+};
+
 function asApiError(error: unknown): ApiError {
   if (error instanceof Error) return error as ApiError;
   return new Error(String(error)) as ApiError;
+}
+
+function friendlyTransferError(error: unknown, action: string) {
+  const message =
+    error instanceof Error ? error.message : String(error);
+  if (/abort|timed?\s*out|timeout/i.test(message)) {
+    return new Error(
+      `${action}超时。车机可能正在写入 P4，请稍后重试。`,
+    );
+  }
+  if (/network request failed|unable to upload|socket/i.test(message)) {
+    return new Error(
+      `${action}时网络中断，请确认仍连接 SD5580-CARPLAY 后重试。`,
+    );
+  }
+  return new Error(
+    message || `${action}失败，请稍后重试。`,
+  );
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 export function normalizeBaseUrl(input: string) {
@@ -108,6 +144,59 @@ export class ScreenManagerApi {
     });
   }
 
+  async transferStatus() {
+    return this.request<TransferStatusResponse>(
+      '/api/v1/transfer',
+      {},
+      8000,
+    );
+  }
+
+  private async waitForTransfer(
+    kind: 'wallpaper' | 'firmware',
+    initial: TransferAccepted,
+    onProgress?: (progress: number) => void,
+    timeoutMs = 180000,
+  ) {
+    if (!initial.accepted) {
+      onProgress?.(1);
+      return initial;
+    }
+
+    const deadline = Date.now() + timeoutMs;
+    let transientFailures = 0;
+    while (Date.now() < deadline) {
+      await sleep(600);
+      try {
+        const response = await this.transferStatus();
+        const transfer = response.transfer;
+        transientFailures = 0;
+        if (transfer.error) throw new Error(transfer.error);
+        if (
+          transfer.kind === kind ||
+          transfer.kind === undefined
+        ) {
+          onProgress?.(
+            Math.min(1, Math.max(0, transfer.progress ?? 0)),
+          );
+        }
+        if (!transfer.active) {
+          if (transfer.state === 'error') {
+            throw new Error(transfer.error || `${kind} 写入失败`);
+          }
+          onProgress?.(1);
+          return initial;
+        }
+      } catch (error) {
+        transientFailures += 1;
+        if (transientFailures >= 5) {
+          throw error;
+        }
+      }
+    }
+    throw new Error(`${kind === 'wallpaper' ? '壁纸' : '固件'}写入超时`);
+  }
+
   async uploadWallpaper(
     wallpaper: WallpaperPrepared,
     onProgress?: (progress: number) => void,
@@ -134,18 +223,41 @@ export class ScreenManagerApi {
             .toString(16)
             .padStart(8, '0')}`,
         },
+        // iOS background URLSession retries and times out local HTTP uploads
+        // even after the app has shown an error. Keep this transfer tied to
+        // the foreground task so failure is final and never crashes the app.
+        sessionType: 'foreground',
         onProgress: ({ bytesSent, totalBytes }) => {
-          onProgress?.(totalBytes ? bytesSent / totalBytes : 0);
+          onProgress?.(
+            0.35 * (totalBytes ? bytesSent / totalBytes : 0),
+          );
         },
       },
     );
-    const result = await upload.uploadAsync();
-    upload.release();
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(result.body || `壁纸上传失败 (${result.status})`);
+    try {
+      const result = await upload.uploadAsync();
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(result.body || `壁纸上传失败 (${result.status})`);
+      }
+      const accepted = JSON.parse(result.body || '{}') as TransferAccepted;
+      await this.waitForTransfer('wallpaper', accepted, (progress) => {
+        onProgress?.(0.35 + 0.65 * progress);
+      });
+      onProgress?.(1);
+      return {
+        ok: accepted.ok !== false,
+        crc32: `0x${wallpaper.crc32.toString(16).padStart(8, '0')}`,
+        accepted: accepted.accepted === true,
+      };
+    } catch (error) {
+      throw friendlyTransferError(error, '壁纸上传');
+    } finally {
+      try {
+        upload.release();
+      } catch {
+        // The native task may already have released itself after a failure.
+      }
     }
-    onProgress?.(1);
-    return JSON.parse(result.body) as { ok: boolean; crc32: string };
   }
 
   async uploadFirmware(
@@ -163,22 +275,44 @@ export class ScreenManagerApi {
         headers: {
           'X-Firmware-MD5': md5,
         },
+        sessionType: 'foreground',
         onProgress: ({ bytesSent, totalBytes }) => {
-          onProgress?.(totalBytes ? bytesSent / totalBytes : 0);
+          onProgress?.(
+            0.35 * (totalBytes ? bytesSent / totalBytes : 0),
+          );
         },
       },
     );
-    const result = await upload.uploadAsync();
-    upload.release();
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(result.body || `固件上传失败 (${result.status})`);
+    try {
+      const result = await upload.uploadAsync();
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(result.body || `固件上传失败 (${result.status})`);
+      }
+      const accepted = JSON.parse(result.body || '{}') as TransferAccepted;
+      await this.waitForTransfer(
+        'firmware',
+        accepted,
+        (progress) => {
+          onProgress?.(0.35 + 0.65 * progress);
+        },
+        600000,
+      );
+      onProgress?.(1);
+      return {
+        ok: accepted.ok !== false,
+        md5,
+        restarting: true,
+        accepted: accepted.accepted === true,
+      };
+    } catch (error) {
+      throw friendlyTransferError(error, '固件上传');
+    } finally {
+      try {
+        upload.release();
+      } catch {
+        // The native task may already have released itself after a failure.
+      }
     }
-    onProgress?.(1);
-    return JSON.parse(result.body) as {
-      ok: boolean;
-      md5: string;
-      restarting: boolean;
-    };
   }
 
   async rebootP4() {

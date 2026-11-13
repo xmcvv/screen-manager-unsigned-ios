@@ -2,7 +2,7 @@
   "expo": {
     "name": "车屏管家",
     "slug": "vehicle-screen-manager",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "screensmith",
@@ -29,6 +29,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sd5580.screenmanager",
+      "buildNumber": "2",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
@@ -42,6 +43,7 @@
     },
     "android": {
       "package": "com.sd5580.screenmanager",
+      "versionCode": 2,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",

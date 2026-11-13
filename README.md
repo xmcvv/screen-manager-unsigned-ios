@@ -11,6 +11,7 @@
 - 图片自动居中裁剪为 800 × 480，并在手机端转换为 RGB565
 - 壁纸 CRC32 校验后写入 P4 独立分区并热重载
 - P4 固件选择、MD5 显示、上传进度、ESP OTA 镜像校验和自动重启
+- 壁纸/固件上传使用 202 异步任务，P4 长时间擦除时不会拖垮 HTTP 服务
 - 车机地址测试与保存，断线时保留最近状态
 - OLED 深色中文界面，Wi-Fi/USB 图标按状态整体变色和闪烁
 
@@ -76,7 +77,11 @@ Apple Developer 证书，适用于 TrollStore 或已越狱设备。
 3. 安装 CocoaPods。
 4. 使用 `xcodebuild` 构建 arm64 Release `.app`。
 5. 完全关闭代码签名。
-6. 打包为 `ScreenManager-v1.0.0-ios-trollstore-unsigned.ipa`。
+6. 打包为 `ScreenManager-v1.0.1-ios-trollstore-unsigned.ipa`。
+
+iOS 上传任务使用前台 URLSession。后台 URLSession 会在本地 HTTP 超时后继续
+重试，既可能造成重复推送，也可能让 JS 原生任务状态失配；前台任务失败后可立即
+释放并安全重试。
 
 本地 macOS 开发也可以使用：
 
@@ -117,6 +122,9 @@ P4 使用 ESP-IDF 5.5.4 构建，具体环境变量见根目录交接文档。
 ## API
 
 完整端点、二进制负载和 P4 帧说明见 [docs/API.md](docs/API.md)。
+
+大文件接口返回 `202 Accepted`，客户端通过 `GET /api/v1/transfer` 获取真实写入
+进度。P4 先完成 Flash 擦除并返回准备确认，5580 才开始发送数据。
 
 ## 安全说明
 

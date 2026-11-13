@@ -34,6 +34,26 @@
 
 读取六个仪表槽位、显隐状态和日夜主题。
 
+## GET /api/v1/transfer
+
+读取当前 P4 文件传输状态。`state` 可能为 `idle`、`queued`、
+`waiting`、`writing`、`done` 或 `error`。
+
+```json
+{
+  "ok": true,
+  "transfer": {
+    "id": 4,
+    "active": true,
+    "kind": "wallpaper",
+    "state": "waiting",
+    "progress": 0,
+    "message": "0/768000",
+    "error": ""
+  }
+}
+```
+
 ## PUT /api/v1/dashboard
 
 请求体必须为 9 字节：
@@ -76,11 +96,31 @@ T_WP_END   0x25
 
 P4 完成写入并复核 CRC 后才提交壁纸头和热重载。
 
+该接口不再等待 P4 完成全部 Flash 操作。5580 接收并校验完整文件后立即返回
+`202 Accepted`，随后由后台状态机等待 P4 擦除完成确认，再分段发送像素。
+客户端应轮询 `/api/v1/transfer` 直到 `active=false`。
+
+两个客户端不能同时提交壁纸或固件；已有传输时返回 `409 Conflict`。
+
 ## POST /api/v1/firmware/p4?md5=...
 
 请求体为 ESP32-P4 的 `sd5580_link.bin`。单包不能超过 8 MiB。
 
 5580 转成 `T_OTA_BEGIN/DATA/END` 帧，P4 使用 ESP-IDF OTA 写入备用分区。`esp_ota_end()` 验证镜像通过后才设置启动分区并重启。
+
+固件接口同样返回 `202 Accepted`，通过 `/api/v1/transfer` 查询进度。
+
+## P4 传输准备确认
+
+P4 在 Flash 擦除或 OTA 分区准备完成后，通过 `T_UI_CMD (0x26)` 返回：
+
+| 命令 | 含义 |
+|---|---|
+| `0xA9` | 壁纸分区已擦除，可以发送像素 |
+| `0xAA` | OTA 分区已准备，可以发送固件 |
+| `0xAB` | 准备失败 |
+
+5580 在等待期间暂停 P4 心跳和遥测写入，避免把 TCP 发送缓冲塞满。
 
 ## 帧校验
 

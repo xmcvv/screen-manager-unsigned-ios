@@ -110,6 +110,7 @@ export function ScreenManagerProvider({
   const [transferProgress, setTransferProgress] = useState<number>();
   const polling = useRef(false);
   const mounted = useRef(true);
+  const consecutiveFailures = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -148,6 +149,7 @@ export function ScreenManagerProvider({
         setStatus(snapshot.status);
         setTelemetry(snapshot.telemetry);
         setConnection('online');
+        consecutiveFailures.current = 0;
         setLastError(undefined);
         setHistory((current) => {
           const next = [
@@ -170,12 +172,20 @@ export function ScreenManagerProvider({
         return true;
       } catch (error) {
         if (!mounted.current) return false;
-        setConnection('offline');
+        consecutiveFailures.current += 1;
         const message =
           error instanceof Error ? error.message : '无法连接车机';
-        setLastError(
-          message.includes('aborted') ? '连接超时' : message,
-        );
+        const friendly =
+          message.includes('aborted') || /timeout|timed out/i.test(message)
+            ? '连接超时'
+            : message;
+        setLastError(friendly);
+        // A transfer briefly occupies the 5580 HTTP service while it stages
+        // uploaded data. Keep the last known state through short gaps and only
+        // show offline after three independent polling failures.
+        if (consecutiveFailures.current >= 3) {
+          setConnection('offline');
+        }
         return false;
       } finally {
         polling.current = false;
@@ -196,6 +206,7 @@ export function ScreenManagerProvider({
     const normalized = normalizeBaseUrl(nextEndpoint);
     setEndpointState(normalized);
     await AsyncStorage.setItem(ENDPOINT_KEY, normalized);
+    consecutiveFailures.current = 0;
     setConnection('connecting');
   }, []);
 

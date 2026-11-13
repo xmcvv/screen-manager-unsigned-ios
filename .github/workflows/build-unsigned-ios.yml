@@ -80,16 +80,16 @@ jobs:
           rm -rf Payload
           mkdir Payload
           ditto "$app" "Payload/$(basename "$app")"
-          zip -qry ScreenManager-v1.0.0-ios-trollstore-unsigned.ipa Payload
+          zip -qry ScreenManager-v1.0.1-ios-trollstore-unsigned.ipa Payload
 
           echo "IPA:"
-          ls -lh ScreenManager-v1.0.0-ios-trollstore-unsigned.ipa
-          shasum -a 256 ScreenManager-v1.0.0-ios-trollstore-unsigned.ipa
+          ls -lh ScreenManager-v1.0.1-ios-trollstore-unsigned.ipa
+          shasum -a 256 ScreenManager-v1.0.1-ios-trollstore-unsigned.ipa
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
           name: ScreenManager-unsigned-ipa
-          path: ScreenManager-v1.0.0-ios-trollstore-unsigned.ipa
+          path: ScreenManager-v1.0.1-ios-trollstore-unsigned.ipa
           if-no-files-found: error
           retention-days: 7

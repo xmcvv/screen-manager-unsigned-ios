@@ -1,0 +1,57 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build arm64 release APK
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+
+      - name: Prepare APK
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk \
+            ScreenManager-v1.0.1-android-arm64.apk
+          sha256sum ScreenManager-v1.0.1-android-arm64.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScreenManager-android-apk
+          path: ScreenManager-v1.0.1-android-arm64.apk
+          if-no-files-found: error
+          retention-days: 7

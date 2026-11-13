@@ -11,8 +11,11 @@ export type LinkInfo = {
 export type TransferInfo = {
   active: boolean;
   kind?: 'wallpaper' | 'firmware' | 'dashboard';
+  id?: number;
+  state?: 'idle' | 'queued' | 'writing' | 'done' | 'error';
   progress?: number;
   message?: string;
+  error?: string;
 };
 
 export type StatusResponse = {

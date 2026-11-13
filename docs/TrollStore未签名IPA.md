@@ -10,7 +10,7 @@
 它执行以下步骤：
 
 1. Ubuntu/Windows 不需要参与 iOS 编译。
-2. GitHub 的 `macos-15` runner 自动生成 Expo iOS 工程。
+2. GitHub 的 `macos-26` runner 自动生成 Expo iOS 工程。
 3. CocoaPods 安装原生依赖。
 4. `xcodebuild` 生成 arm64 Release `.app`。
 5. 强制使用：
@@ -23,7 +23,7 @@
 产出文件：
 
 ```text
-ScreenManager-v1.0.0-ios-trollstore-unsigned.ipa
+ScreenManager-v1.0.1-ios-trollstore-unsigned.ipa
 ```
 
 TrollStore 安装的是永久签名版本，不需要 Apple Developer 证书。越狱设备也可以通过 Filza 解压到 `/Applications`，或使用 TrollStore 安装。
